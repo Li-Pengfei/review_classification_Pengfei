@@ -142,19 +142,24 @@ filter_len = [1,2,3,4]
 
 
 # Build CNN
-print("Building CNN...")
-graph_input1 = Input(shape=(sequence_length,embedding_dim))
-embed1 = Embedding(vocabsize, embedding_dim,input_length=sequence_length,name="embedding")(graph_input1)
-convs1 = []
-for fsz in filter_len:
-	conv1 = Conv1D(filters=nb_filter,kernel_size=fsz,activation='relu')(graph_input1)
-	pool1 = GlobalMaxPooling1D()(conv1)
-	convs1.append(pool1)
-y1 = Concatenate()(convs1) if len(convs1) > 1 else convs1[0]
-z1 = Dropout(dropout_prob)(y1)
-z1 = Dense(nb_classes)(z1)
-z1 = BatchNormalization()(z1)
-model_output1 = Activation('softmax')(z1)
+def build_model(ft=False):
+	print("Building CNN...")
+	if ft==False:
+		graph_input1 = Input(shape=(sequence_length,embedding_dim))
+		embed1 = Embedding(vocabsize, embedding_dim,input_length=sequence_length,name="embedding")(graph_input1)
+	convs1 = []
+	for fsz in filter_len:
+		conv1 = Conv1D(filters=nb_filter,kernel_size=fsz,activation='relu')(graph_input1)
+		pool1 = GlobalMaxPooling1D()(conv1)
+		convs1.append(pool1)
+	y1 = Concatenate()(convs1) if len(convs1) > 1 else convs1[0]
+	z1 = Dropout(dropout_prob)(y1)
+	z1 = Dense(nb_classes)(z1)
+	z1 = BatchNormalization()(z1)
+	model_output1 = Activation('softmax')(z1)
+	cnn_model = Model(inputs=graph_input1, outputs=model_output1)
+
+	return cnn_model
 
 
 # Train CNN
@@ -163,12 +168,13 @@ pred,y_test = [],[]
 for i in range(k_fold):
 	y_trains = to_categorical(Y_train[i],num_classes=nb_classes)
 	y_tests = to_categorical(Y_test[i],num_classes=nb_classes)
-	cnn_model = Model(inputs=graph_input1, outputs=model_output1)
+	cnn_model = build_model(ft=False)
 	cnn_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 	cnn_model.fit(X_train[i], y_trains, epochs=num_epochs, batch_size=batch_size, verbose=2)	
 	pred = pred + np.argmax(cnn_model.predict(X_test[i]),axis=1).tolist()
 	y_test = y_test + Y_test[i].tolist()
 	print('%sth fold finished'%str(i))
+	K.clear_session()
 
 cm = confusion_matrix(y_test,pred)
 print('%s overall accuracy is : %0.2f'%(label_name,accuracy_score(y_test,pred)*100))
