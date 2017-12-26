@@ -4,7 +4,7 @@ import random
 import cPickle
 import os.path
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 from sklearn.metrics import confusion_matrix, f1_score, accuracy_score, average_precision_score
 from sklearn.model_selection import train_test_split, KFold
@@ -100,7 +100,7 @@ def load_data(data_source, y, k):
         Y_train.append(y[train])
         Y_test.append(y[test])
 
-    return X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length
+    return X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length, ddata
 
 
 def top_n_accuracy(y_true, y_pred):
@@ -113,7 +113,7 @@ data, label = read_Surveycsv(xlsx_file, roi_list)
 
 # Data Preparation
 print("Load data...")
-label_name = 'content'
+label_name = 'context'
 k_fold = 5
 if label_name is 'context':
     nb_classes = len(label[0][2])
@@ -150,7 +150,7 @@ else:
     sub_label2 = to_categorical(label[1][0], num_classes=nb_classes[1])
     sub_label3 = to_categorical(label[2][0], num_classes=nb_classes[2])
     sub_label = np.concatenate((sub_label1, sub_label2, sub_label3), axis=1)
-X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length = load_data(data, sub_label, k_fold)
+X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length, original_data = load_data(data, sub_label, k_fold)
 
 # Model Hyperparameters
 embedding_dim = 300
@@ -224,7 +224,7 @@ csv_path = './pred_results/prediction_%s.csv' % label_name
 true_label = [idx2label[i] for i in y_test]
 pred_label = [idx2label[i] for i in pred]
 
-df = pd.DataFrame({'HT_Experience': data,
+df = pd.DataFrame({'HT_Experience': original_data,
                    'True_Label': true_label,
                    'True_Label_idx': y_test,
                    'Predicted_Label': pred_label,
