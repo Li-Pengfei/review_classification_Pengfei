@@ -9,28 +9,30 @@ import itertools
 from collections import Counter
 from sklearn import preprocessing
 
+
 def convert_label(annot):
+    annot = np.char.lower(annot)
 
     uni_label = np.unique(annot).tolist()
     label = [uni_label.index(x) for x in annot]
-    # uniq_label = []
-    # for u in uni_label:
-    #     uniq_label.append(annot.tolist().count(u)) Counter(annot.tolist())
+
+    idx2label = {idx: word for idx, word in enumerate(uni_label)}
+
+    return [label, Counter(annot.tolist()), uni_label]
 
 
-    return [label, annot, uni_label]
-
-def read_Surveycsv(filepath,roilist):
+def read_Surveycsv(filepath, roilist):
 
     df = pd.read_excel(filepath, usecols=roilist)
     # print(df.describe())
     all_data = np.asarray(df.values.tolist())
-    data = all_data[:,0]
-    context_label = convert_label(all_data[:,1]) 
-    content_label = convert_label(all_data[:,2]) 
-    driver_label = convert_label(all_data[:,3])
+    data = all_data[:, 0]
+    context_label = convert_label(all_data[:, 1])
+    content_label = convert_label(all_data[:, 2])
+    driver_label = convert_label(all_data[:, 3])
 
-    return [data,[context_label,content_label,driver_label]]
+    return [data, [context_label, content_label, driver_label]]
+
 
 def fileWriter(filename, file):
     """
@@ -42,8 +44,9 @@ def fileWriter(filename, file):
         thefile.write("%s\n" % sentence)
     thefile.close()
 
+
 def write_Label(content, listuple, csv_path, index):
-    ##creating pandas
+    # creating pandas
     idx_comment = range(len(content))
     df_comment = pd.DataFrame({'id': idx_comment, 'comment': content})
     df_survey = pd.DataFrame(listuple, columns=['sentence', 'id', 'label'])
@@ -52,7 +55,7 @@ def write_Label(content, listuple, csv_path, index):
 
     df_final['label'] = df_final['label'].apply(lambda x: rule_all(x))
 
-    ### Write label to original CSV file
+    # Write label to original CSV file
     with open(csv_path, 'r') as csvinput:
         reader = csv.reader(csvinput)
         all = []
@@ -71,11 +74,9 @@ def write_Label(content, listuple, csv_path, index):
         writer = csv.writer(csvoutput, lineterminator='\n')
         writer.writerows(all)
 
+
 if __name__ == '__main__':
 
     xlsx_file = '/home/dongzhe/Documents/review_cluster/data/HT Data.xlsx'
-    roi_list = ['HT Experience','Context','Content','Driver']
-    data, label = read_Surveycsv(xlsx_file,roi_list)
-
-
-
+    roi_list = ['HT Experience', 'Context', 'Content', 'Driver']
+    data, label = read_Surveycsv(xlsx_file, roi_list)

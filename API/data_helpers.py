@@ -5,9 +5,11 @@ import itertools
 from collections import Counter
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-def copy_words(A,B):
-    A = A+' '
-    return A*B
+
+def copy_words(A, B):
+    A = A + ' '
+    return A * B
+
 
 def clean_str(string):
     """
@@ -49,16 +51,21 @@ def pad_sentences(sentences, padding_word="<PAD/>"):
     Pads all sentences to the same length. The length is defined by the longest sentence.
     Returns padded sentences.
     """
-    sequence_length = max(len(x) for x in sentences)
+    length = [len(x) for x in sentences]
+    sequence_length = int(np.percentile(length, 90))
+    print('max sentence length is %d' % sequence_length)
     padded_sentences = []
     sentence_length = []
     for i in range(len(sentences)):
         sentence = sentences[i]
         num_padding = sequence_length - len(sentence)
-        new_sentence = sentence + [padding_word] * num_padding
-        padded_sentences.append(new_sentence)
-        sentence_length.append(len(sentence))
-    return [sequence_length, padded_sentences,sentence_length]
+        if num_padding > 0:
+            new_sentence = sentence + [padding_word] * num_padding
+            padded_sentences.append(new_sentence)
+            sentence_length.append(len(sentence))
+        else:
+            padded_sentences.append(sentence[:sequence_length])
+    return [sequence_length, padded_sentences, sentence_length]
 
 
 def build_vocab(sentences):
@@ -83,6 +90,18 @@ def build_input_data(sentences, vocabulary):
     return x
 
 
+def split_num(sent):
+    # split number followed by word character
+    sent_new = []
+    for word in sent:
+        match = re.match(r"([0-9]+)([a-zA-Z]+)", word, re.I)
+        if match:
+            sent_new.append(match.group(1))
+            sent_new.append(match.group(2))
+        else:
+            sent_new.append(word)
+    return sent_new
+
 
 def load_data(corpus):
     """
@@ -94,41 +113,45 @@ def load_data(corpus):
     x_text = [s.strip() for s in corpus]
     sentences = [clean_str(sent) for sent in x_text]
     sentences = [s.split(" ") for s in sentences]
+    sentences = [split_num(s) for s in sentences]
 
-    sequence_length, sentences_padded,sen_length = pad_sentences(sentences)
+    sequence_length, sentences_padded, sen_length = pad_sentences(sentences)
     vocabulary, vocabulary_inv = build_vocab(sentences_padded)
     x = build_input_data(sentences_padded, vocabulary)
     return [x, sequence_length, vocabulary, vocabulary_inv]
 
-def make_bow(corpus,bow_file):
+
+def make_bow(corpus, bow_file):
     if os.path.exists(bow_file):
-        a = cPickle.load(open(bowpath,"rb"))
-        c_vocab,c_vector = a[0], a[1]
+        a = cPickle.load(open(bowpath, "rb"))
+        c_vocab, c_vector = a[0], a[1]
     else:
-        c_dict = TfidfVectorizer(lowercase=False,stop_words='english',min_df=2)
+        c_dict = TfidfVectorizer(lowercase=False, stop_words='english', min_df=2)
         c_vector = c_dict.fit_transform(corpus)
         c_vocab = c_dict.get_feature_names()
         cPickle.dump([c_vocab, c_vector], open(bow_file, "wb"))
 
-    return c_vocab,c_vector
+    return c_vocab, c_vector
 
 
-def reconstrut_data(filepath,corppath):
-    x = cPickle.load(open(filepath,"rb"))
-    c_vocab,c_vector = x[0], x[1]
+def reconstrut_data(filepath, corppath):
+    x = cPickle.load(open(filepath, "rb"))
+    c_vocab, c_vector = x[0], x[1]
     c_vector = c_vector.todense()
     tfile = open(corppath, 'w')
     for c in c_vector:
         x = np.squeeze(np.asarray(c))
-        new_string = ''.join([copy_words(c_vocab[i],x[i]) for i in np.flatnonzero(x > 0)])
-        tfile.write("%s\n" %new_string[:-1])
+        new_string = ''.join([copy_words(c_vocab[i], x[i]) for i in np.flatnonzero(x > 0)])
+        tfile.write("%s\n" % new_string[:-1])
     tfile.close()
+
 
 def load_bin_vec(fname, svocab):
     """
     Loads 300x1 word vecs from Google (Mikolov) word2vec
     """
     word_vecs = {}
+    word_vecs["<PAD/>"] = np.zeros(300)
     num_found1 = 0
     with open(fname, "rb") as f:
         header = f.readline()
@@ -143,15 +166,37 @@ def load_bin_vec(fname, svocab):
                     break
                 if ch != '\n':
                     word.append(ch)
-            word = word.decode('utf-8','ignore')
+            word = word.decode('utf-8', 'ignore')
             if word in svocab:
-                num_found1+=1
+                num_found1 += 1
                 word_vecs[word] = np.fromstring(f.read(binary_len), dtype='float32')
                 continue
-            else: f.read(binary_len)
-    print('%d out of %d words found in the word2vec vocab'%(num_found1,len(svocab)))
-    for i,word in enumerate(svocab):
+            else:
+                f.read(binary_len)
+    print('%d out of %d words found in the word2vec vocab' % (num_found1, len(svocab)))
+
+    for i, word in enumerate(svocab):
         if word not in word_vecs:
-            word_vecs[word] = np.random.uniform(-0.1,0.1,300)
+            print(word)
+            word_vecs[word] = np.random.uniform(-0.1, 0.1, 300)
 
     return word_vecs
+
+
+# function for calculating precision and recall for each class
+def getPrecision(pred_test, yTest, targetLabel):
+    # reverse input argument pred_test yTest to get recall
+    targetLabelCount = 0
+    correctTargetLabelCount = 0
+
+    for idx in range(len(pred_test)):
+        if pred_test[idx] == targetLabel:
+            targetLabelCount += 1
+
+            if pred_test[idx] == yTest[idx]:
+                correctTargetLabelCount += 1
+
+    if correctTargetLabelCount == 0:
+        return 0
+
+    return float(correctTargetLabelCount) / targetLabelCount
