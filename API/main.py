@@ -4,7 +4,7 @@ import random
 import cPickle
 import os.path
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 from sklearn.metrics import confusion_matrix, f1_score, accuracy_score, average_precision_score
 from sklearn.model_selection import train_test_split, KFold
@@ -27,7 +27,7 @@ from survey_reader import *
 from w2v import train_word2vec
 import data_helpers
 
-currentpath = '/data1/shared_all/review_classification_Pengfei-master'
+currentpath = '/data1/shared_all/review_classification_Pengfei'
 os.chdir(currentpath)
 
 
@@ -113,7 +113,7 @@ data, label = read_Surveycsv(xlsx_file, roi_list)
 
 # Data Preparation
 print("Load data...")
-label_name = 'context'
+label_name = 'content'
 k_fold = 5
 if label_name is 'context':
     nb_classes = len(label[0][2])
@@ -193,6 +193,7 @@ def build_model(ft=False):
 # Train CNN
 print("Training CNN...")
 pred, y_test = [], []
+pred_prob = []
 for i in range(k_fold):
     y_trains = to_categorical(Y_train[i], num_classes=nb_classes)
     y_tests = to_categorical(Y_test[i], num_classes=nb_classes)
@@ -200,6 +201,7 @@ for i in range(k_fold):
     cnn_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     cnn_model.fit(X_train[i], y_trains, epochs=num_epochs, batch_size=batch_size, verbose=2)
     pred = pred + np.argmax(cnn_model.predict(X_test[i]), axis=1).tolist()
+    pred_prob = pred_prob + cnn_model.predict(X_test[i]).tolist()
     y_test = y_test + Y_test[i].tolist()
     print('%sth fold finished' % str(i))
     K.clear_session()
@@ -218,17 +220,23 @@ plot_confusion_matrix(cm, classes=labels, normalize=True,
 plt.show()
 
 
-# Output wrong predictions to csv file
+# Output prediction results to csv file
 csv_path = './pred_results/prediction_%s.csv' % label_name
 
 true_label = [idx2label[i] for i in y_test]
 pred_label = [idx2label[i] for i in pred]
 
+pred_label_prob = [[(idx2label[i], round(prob * 100, 2))
+                    for i, prob in sorted(enumerate(probabilities), key=lambda x:x[1], reverse=True)]
+                   for probabilities in pred_prob]
+# pred_label_prob = [[(idx2label[i], round(prob * 100, 2)) for i, prob in enumerate(probabilities)] for probabilities in pred_prob]
+
 df = pd.DataFrame({'HT_Experience': original_data,
                    'True_Label': true_label,
                    'True_Label_idx': y_test,
                    'Predicted_Label': pred_label,
-                   'Predicted_Label_idx': pred})
+                   'Predicted_Label_idx': pred,
+                   'Pred_Label_prob': pred_label_prob})
 df = df.sort_values(by=['True_Label_idx', 'Predicted_Label_idx'])
 df.to_csv(csv_path, encoding='utf-8')
 print('Prediction results written to: ', csv_path)
@@ -241,14 +249,14 @@ print('Prediction results written to: ', csv_path)
 # # survey_reader.write_Label(y_pred,labels,shuffle_index)
 # thefile = open('./API_phase2/content.txt', 'w')
 # for i,sentence in enumerate(data_test):
-# 	pred_label = [new_labelname[z] for z in y_pred[i]]
-# 	thefile.write("%s\t" % sentence.encode('ascii', 'ignore').decode('ascii'))
-# 	thefile.write(" ")
-# 	thefile.write("%s\t" % yn_test[i])
-# 	thefile.write(" ")
-# 	for j in pred_label:
-# 		thefile.write("%s\t" % j)
-# 		thefile.write("\n")
+#   pred_label = [new_labelname[z] for z in y_pred[i]]
+#   thefile.write("%s\t" % sentence.encode('ascii', 'ignore').decode('ascii'))
+#   thefile.write(" ")
+#   thefile.write("%s\t" % yn_test[i])
+#   thefile.write(" ")
+#   for j in pred_label:
+#       thefile.write("%s\t" % j)
+#       thefile.write("\n")
 # thefile.close()
 
 # prob = cnn_model.predict(x_test, verbose=2)
