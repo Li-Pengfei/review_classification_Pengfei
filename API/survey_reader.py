@@ -4,7 +4,6 @@ import pandas as pd
 import nltk
 import cPickle
 import numpy as np
-import data_helper
 import itertools
 from collections import Counter
 from sklearn import preprocessing
@@ -74,9 +73,3 @@ def write_Label(content, listuple, csv_path, index):
         writer = csv.writer(csvoutput, lineterminator='\n')
         writer.writerows(all)
 
-
-if __name__ == '__main__':
-
-    xlsx_file = '/home/dongzhe/Documents/review_cluster/data/HT Data.xlsx'
-    roi_list = ['HT Experience', 'Context', 'Content', 'Driver']
-    data, label = read_Surveycsv(xlsx_file, roi_list)
