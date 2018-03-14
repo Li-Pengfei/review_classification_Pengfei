@@ -46,13 +46,17 @@ def load_data_and_labels(filepath):
     return x_text
 
 
-def pad_sentences(sentences, padding_word="<PAD/>"):
+def pad_sentences(sentences, sequence_length=None):
     """
     Pads all sentences to the same length. The length is defined by the longest sentence.
     Returns padded sentences.
     """
+    padding_word = "<PAD/>"
+
     length = [len(x) for x in sentences]
-    sequence_length = int(np.percentile(length, 90))
+    if sequence_length == None:
+        sequence_length = int(np.percentile(length, 90))
+
     print('max sentence length is %d' % sequence_length)
     padded_sentences = []
     sentence_length = []
@@ -103,7 +107,7 @@ def split_num(sent):
     return sent_new
 
 
-def load_data(corpus):
+def load_data(corpus, sequence_length=None):
     """
     Loads and preprocessed data for the MR dataset.
     Returns input vectors, labels, vocabulary, and inverse vocabulary.
@@ -115,7 +119,7 @@ def load_data(corpus):
     sentences = [s.split(" ") for s in sentences]
     sentences = [split_num(s) for s in sentences]
 
-    sequence_length, sentences_padded, sen_length = pad_sentences(sentences)
+    sequence_length, sentences_padded, sen_length = pad_sentences(sentences, sequence_length)
     vocabulary, vocabulary_inv = build_vocab(sentences_padded)
     x = build_input_data(sentences_padded, vocabulary)
     return [x, sequence_length, vocabulary, vocabulary_inv]
@@ -177,7 +181,7 @@ def load_bin_vec(fname, svocab):
 
     for i, word in enumerate(svocab):
         if word not in word_vecs:
-            print(word)
+            # print(word)
             word_vecs[word] = np.random.uniform(-0.1, 0.1, 300)
 
     return word_vecs

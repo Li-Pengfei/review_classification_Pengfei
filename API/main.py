@@ -66,7 +66,7 @@ def plot_confusion_matrix(cm, classes,
     plt.xlabel('Predicted label')
 
 
-def load_data(data_source, y, k):
+def load_data_CV(data_source, y, k):
 
     x, sequence_length, vocabulary, vocabulary_inv_list = data_helpers.load_data(data_source)
     vocabulary_inv = {key: value for key, value in enumerate(vocabulary_inv_list)}
@@ -96,13 +96,48 @@ def load_data(data_source, y, k):
     return X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length, ddata
 
 
+def load_train_data(data_source, y):
+    x, sequence_length, vocabulary, vocabulary_inv_list = data_helpers.load_data(data_source)
+    vocabulary_inv = {key: value for key, value in enumerate(vocabulary_inv_list)}
+
+    shuffle_indices = np.random.permutation(np.arange(len(y)))
+    x = x[shuffle_indices]
+    y = y[shuffle_indices]
+    ddata = data_source[shuffle_indices]
+
+    embedding_file = './API/word2vec.p'
+    if os.path.exists(embedding_file):
+        embedding_weights = cPickle.load(open(embedding_file, "rb"))
+    else:
+        embedding_weights = data_helpers.load_bin_vec('/data1/shared_all/GoogleNews-vectors-negative300.bin',
+                                                      [new_vocab for new_vocab in vocabulary])
+        cPickle.dump(embedding_weights, open(embedding_file, "wb"))
+
+    X_train = np.stack([np.stack([embedding_weights[vocabulary_inv[word]] for word in sentence]) for sentence in x])
+    Y_train = y
+
+    return X_train, Y_train, vocabulary_inv, sequence_length, ddata
+
+def load_test_data(data_source, sequence_length):
+    x, sequence_length, vocabulary, vocabulary_inv_list = data_helpers.load_data(data_source, sequence_length)
+    vocabulary_inv = {key: value for key, value in enumerate(vocabulary_inv_list)}
+
+    # load word embeddings
+    print("Loading word embeddings...")
+    embedding_weights = data_helpers.load_bin_vec('/data1/shared_all/GoogleNews-vectors-negative300.bin',
+                                                      [new_vocab for new_vocab in vocabulary])
+
+    X_test = np.stack([np.stack([embedding_weights[vocabulary_inv[word]] for word in sentence]) for sentence in x])
+
+    return X_test
+
 def top_n_accuracy(y_true, y_pred):
     return metrics.top_k_categorical_accuracy(y_true, y_pred, k=3)
 
 
 
 
-def train_CV(train_file, category, result_path, k_fold=5):
+def train_CV(train_file, category, result_file, k_fold=5):
 
     # Data Preparation
     print("Load data...")
@@ -143,7 +178,7 @@ def train_CV(train_file, category, result_path, k_fold=5):
         sub_label2 = to_categorical(label[1][0], num_classes=nb_classes[1])
         sub_label3 = to_categorical(label[2][0], num_classes=nb_classes[2])
         sub_label = np.concatenate((sub_label1, sub_label2, sub_label3), axis=1)
-    X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length, original_data = load_data(data, sub_label, k_fold)
+    X_train, Y_train, X_test, Y_test, vocabulary_inv, sequence_length, original_data = load_data_CV(data, sub_label, k_fold)
 
     # Function for building CNN
     def build_model(ft=False):
@@ -210,8 +245,6 @@ def train_CV(train_file, category, result_path, k_fold=5):
     plt.show()
 
     # Output prediction results to csv file
-    csv_path = result_path + 'prediction_%s.csv' % category
-
     true_label = [idx2label[i] for i in y_test]
     pred_label = [idx2label[i] for i in pred]
     # sorted prediction probability
@@ -228,40 +261,136 @@ def train_CV(train_file, category, result_path, k_fold=5):
                        'Predicted_Label_idx': pred,
                        'Pred_Label_prob': pred_label_prob})
     df = df.sort_values(by=['True_Label_idx', 'Predicted_Label_idx'])
-    df.to_csv(csv_path, encoding='utf-8')
-    print('Prediction results written to: ', csv_path)
+    df.to_csv(result_file, encoding='utf-8')
+    print('Prediction results written to: ', result_file)
 
 
-    # Record top-n accuracy for "content"
-    # cnn_model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=[top_n_accuracy])
-    # cnn_model.fit(x_train, y_train, epochs=num_epochs, batch_size=batch_size, verbose=2)
-    # y_pred = [x.argsort()[-3:][::-1] for x in cnn_model.predict(x_test)]
-    # # survey_reader.write_Label(y_pred,labels,shuffle_index)
-    # thefile = open('./API_phase2/content.txt', 'w')
-    # for i,sentence in enumerate(data_test):
-    #   pred_label = [new_labelname[z] for z in y_pred[i]]
-    #   thefile.write("%s\t" % sentence.encode('ascii', 'ignore').decode('ascii'))
-    #   thefile.write(" ")
-    #   thefile.write("%s\t" % yn_test[i])
-    #   thefile.write(" ")
-    #   for j in pred_label:
-    #       thefile.write("%s\t" % j)
-    #       thefile.write("\n")
-    # thefile.close()
+def train(train_file, category):
+    # Data Preparation
+    print("Load data...")
+    roi_list = ['HT Experience', 'Context', 'Content', 'Driver']
+    data, label = read_Surveycsv(train_file, roi_list)
 
-    # prob = cnn_model.predict(x_test, verbose=2)
-    # prob1 = prob[:,:nb_classes[0]]
-    # prob2 = prob[:,nb_classes[0]:nb_classes[0]+nb_classes[1]]
-    # prob3 = prob[:,-nb_classes[2]:]
-    # y_test1 = y_test[:,:nb_classes[0]]
-    # y_test2 = y_test[:,nb_classes[0]:nb_classes[0]+nb_classes[1]]
-    # y_test3 = y_test[:,-nb_classes[2]:]
-    # print ('context mean AP: ', average_precision_score(y_test1,prob1))
-    # print ('content mean AP: ', average_precision_score(y_test2,prob2))
-    # print ('driver mean AP: ', average_precision_score(y_test3,prob3))
+    if category is 'context':
+        nb_classes = len(label[0][2])
+        labels = label[0][2]
+        idx2label = {idx: word for idx, word in enumerate(labels)}
+        label_counter = label[0][1]
+        print("Labels:", labels)
+        print("Index to label:", idx2label)
+        print("Label count:", label_counter)
+        sub_label = np.asarray(label[0][0])
+    elif category is 'content':
+        nb_classes = len(label[1][2])
+        labels = label[1][2]
+        idx2label = {idx: word for idx, word in enumerate(labels)}
+        label_counter = label[1][1]
+        print("Labels:", labels)
+        print("Index to label:", idx2label)
+        print("Label count:", label_counter)
+        sub_label = np.asarray(label[1][0])
+    elif category is 'driver':
+        nb_classes = len(label[2][2])
+        labels = label[2][2]
+        idx2label = {idx: word for idx, word in enumerate(labels)}
+        label_counter = label[2][1]
+        print("Labels:", labels)
+        print("Index to label:", idx2label)
+        print("Label count:", label_counter)
+        sub_label = np.asarray(label[2][0])
+    else:
+        class_name = ['context', 'content', 'driver']
+        nb_classes = [len(label[0][1]), len(label[1][1]), len(label[2][1])]
+        sub_label1 = to_categorical(label[0][0], num_classes=nb_classes[0])
+        sub_label2 = to_categorical(label[1][0], num_classes=nb_classes[1])
+        sub_label3 = to_categorical(label[2][0], num_classes=nb_classes[2])
+        sub_label = np.concatenate((sub_label1, sub_label2, sub_label3), axis=1)
+    X_train, Y_train, vocabulary_inv, sequence_length, original_data = load_train_data(data, sub_label)
+
+    # Function for building CNN
+    def build_model(ft=False):
+        # CNN Model Hyperparameters
+        embedding_dim = 300
+        vocabsize = len(vocabulary_inv)
+        dropout_prob = 0.5
+        nb_filter = 100
+        hidden_dims = 100
+        filter_len = [1, 2, 3, 4]
+
+        if ft == False:
+            graph_input1 = Input(shape=(sequence_length, embedding_dim))
+            embed1 = Embedding(vocabsize, embedding_dim, input_length=sequence_length, name="embedding")(graph_input1)
+        convs1 = []
+        for fsz in filter_len:
+            conv1 = Conv1D(filters=nb_filter, kernel_size=fsz, activation='relu')(graph_input1)
+            pool1 = GlobalMaxPooling1D()(conv1)
+            convs1.append(pool1)
+
+        y1 = Concatenate()(convs1) if len(convs1) > 1 else convs1[0]
+        z1 = Dropout(dropout_prob)(y1)
+        z1 = Dense(hidden_dims, kernel_constraint=maxnorm(2))(z1)
+        print("hidden dim:", hidden_dims)
+        # z1 = BatchNormalization()(z1)
+        z1 = Activation('tanh')(z1)
+        z1 = Dropout(dropout_prob)(z1)
+        z1 = Dense(nb_classes)(z1)
+        # z1 = BatchNormalization()(z1)
+        model_output1 = Activation('softmax')(z1)
+        cnn_model = Model(inputs=graph_input1, outputs=model_output1)
+
+        return cnn_model
+
+    # Train CNN
+    batch_size = 30
+    num_epochs = 10
+
+    y_trains = to_categorical(Y_train, num_classes=nb_classes)
+    print("Building CNN...")
+    cnn_model = build_model(ft=False)
+    cnn_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    print("Training CNN...")
+    cnn_model.fit(X_train, y_trains, epochs=num_epochs, batch_size=batch_size, verbose=2)
+
+    return [cnn_model, idx2label, sequence_length]
+
+def predict(test_file, cnn_model, result_file):
+    trained_model = cnn_model[0]
+    idx2label = cnn_model[1]
+    sequence_length = cnn_model[2]
+
+    data = pd.read_excel(test_file, usecols=['HT Experience']).values.tolist()
+    data = [sent[0] for sent in data]
+
+    X_test = load_test_data(data, sequence_length)
+
+    pred, pred_prob = [], []
+    # predict testing data
+    pred = pred + np.argmax(trained_model.predict(X_test), axis=1).tolist()
+    pred_prob = pred_prob + trained_model.predict(X_test).tolist()
+
+    # Output prediction results to csv file
+    pred_label = [idx2label[i] for i in pred]
+    # sorted prediction probability
+    pred_label_prob = [[(idx2label[i], round(prob * 100, 2))
+                        for i, prob in sorted(enumerate(probabilities), key=lambda x: x[1], reverse=True)]
+                       for probabilities in pred_prob]
+    # unsorted prediction probability
+    # pred_label_prob = [[(idx2label[i], round(prob * 100, 2)) for i, prob in enumerate(probabilities)] for probabilities in pred_prob]
+
+    df = pd.DataFrame({'HT_Experience': data,
+                       'Predicted_Label': pred_label,
+                       'Predicted_Label_idx': pred,
+                       'Pred_Label_prob': pred_label_prob})
+    # df = df.sort_values(by=['Predicted_Label_idx'])
+    df.to_csv(result_file, encoding='utf-8')
+    print('Prediction results written to: ', result_file)
+
 
 
 
 
 if __name__ == '__main__':
-    train_CV('./data/HT Data.xlsx', 'content', './pred_results/')
+    train_CV('./data/HT Data.xlsx', 'content', './pred_results/prediction_content.csv')
+
+    # cnn_model = train('./data/HT Data.xlsx', 'content')
+    # predict('./data/HT Data_test.xlsx', cnn_model, './pred_results/prediction_test.csv')
