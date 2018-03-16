@@ -1,10 +1,7 @@
 import numpy as np
 import pandas as pd
 import random
-import cPickle
 import os.path
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 from sklearn.metrics import confusion_matrix, f1_score, accuracy_score, average_precision_score
 from sklearn.model_selection import train_test_split, KFold
@@ -27,8 +24,8 @@ from survey_reader import *
 from w2v import train_word2vec
 import data_helpers
 
-currentpath = '/data1/shared_all/review_classification_Pengfei'
-os.chdir(currentpath)
+
+w2v_path = './API/GoogleNews-vectors-negative300.bin'
 
 
 def plot_confusion_matrix(cm, classes,
@@ -76,13 +73,10 @@ def load_data_CV(data_source, y, k):
     y = y[shuffle_indices]
     ddata = data_source[shuffle_indices]
 
+    # load word embeddings
+    print("Loading word embeddings...")
+    embedding_weights = data_helpers.load_bin_vec(w2v_path, [new_vocab for new_vocab in vocabulary])
 
-    embedding_file = './API/word2vec.p'
-    if os.path.exists(embedding_file):
-        embedding_weights = cPickle.load(open(embedding_file, "rb"))
-    else:
-        embedding_weights = data_helpers.load_bin_vec('/data1/shared_all/GoogleNews-vectors-negative300.bin', [new_vocab for new_vocab in vocabulary])
-        cPickle.dump(embedding_weights, open(embedding_file, "wb"))
 
     # K-fold CV
     kf = KFold(n_splits=k)
@@ -105,13 +99,9 @@ def load_train_data(data_source, y):
     y = y[shuffle_indices]
     ddata = data_source[shuffle_indices]
 
-    embedding_file = './API/word2vec.p'
-    if os.path.exists(embedding_file):
-        embedding_weights = cPickle.load(open(embedding_file, "rb"))
-    else:
-        embedding_weights = data_helpers.load_bin_vec('/data1/shared_all/GoogleNews-vectors-negative300.bin',
-                                                      [new_vocab for new_vocab in vocabulary])
-        cPickle.dump(embedding_weights, open(embedding_file, "wb"))
+    # load word embeddings
+    print("Loading word embeddings...")
+    embedding_weights = data_helpers.load_bin_vec(w2v_path,[new_vocab for new_vocab in vocabulary])
 
     X_train = np.stack([np.stack([embedding_weights[vocabulary_inv[word]] for word in sentence]) for sentence in x])
     Y_train = y
@@ -124,8 +114,7 @@ def load_test_data(data_source, sequence_length):
 
     # load word embeddings
     print("Loading word embeddings...")
-    embedding_weights = data_helpers.load_bin_vec('/data1/shared_all/GoogleNews-vectors-negative300.bin',
-                                                      [new_vocab for new_vocab in vocabulary])
+    embedding_weights = data_helpers.load_bin_vec(w2v_path,[new_vocab for new_vocab in vocabulary])
 
     X_test = np.stack([np.stack([embedding_weights[vocabulary_inv[word]] for word in sentence]) for sentence in x])
 
@@ -202,12 +191,11 @@ def train_CV(train_file, category, result_file, k_fold=5):
         y1 = Concatenate()(convs1) if len(convs1) > 1 else convs1[0]
         z1 = Dropout(dropout_prob)(y1)
         z1 = Dense(hidden_dims, kernel_constraint=maxnorm(2))(z1)
-        print("hidden dim:", hidden_dims)
-        # z1 = BatchNormalization()(z1)
+        z1 = BatchNormalization()(z1)
         z1 = Activation('tanh')(z1)
         z1 = Dropout(dropout_prob)(z1)
         z1 = Dense(nb_classes)(z1)
-        # z1 = BatchNormalization()(z1)
+        z1 = BatchNormalization()(z1)
         model_output1 = Activation('softmax')(z1)
         cnn_model = Model(inputs=graph_input1, outputs=model_output1)
 
@@ -329,12 +317,11 @@ def train(train_file, category):
         y1 = Concatenate()(convs1) if len(convs1) > 1 else convs1[0]
         z1 = Dropout(dropout_prob)(y1)
         z1 = Dense(hidden_dims, kernel_constraint=maxnorm(2))(z1)
-        print("hidden dim:", hidden_dims)
-        # z1 = BatchNormalization()(z1)
+        z1 = BatchNormalization()(z1)
         z1 = Activation('tanh')(z1)
         z1 = Dropout(dropout_prob)(z1)
         z1 = Dense(nb_classes)(z1)
-        # z1 = BatchNormalization()(z1)
+        z1 = BatchNormalization()(z1)
         model_output1 = Activation('softmax')(z1)
         cnn_model = Model(inputs=graph_input1, outputs=model_output1)
 
@@ -391,6 +378,5 @@ def predict(test_file, cnn_model, result_file):
 
 if __name__ == '__main__':
     train_CV('./data/HT Data.xlsx', 'content', './pred_results/prediction_content.csv')
-
     # cnn_model = train('./data/HT Data.xlsx', 'content')
     # predict('./data/HT Data_test.xlsx', cnn_model, './pred_results/prediction_test.csv')
