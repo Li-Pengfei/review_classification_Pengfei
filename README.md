@@ -4,7 +4,10 @@ This repository contains code, data and report for review classification.
 ## The API package is contained in the API folder
 It contains three mean functions: trainCV(), train(). and predict(). Simply import main.py and call these functions.
 
-## The usage of these functions
+## External Resources Required
+The pre-trained word vectors trained on part of Google News dataset (about 100 billion words) is needed in our model. Please download the file named 'GoogleNews-vectors-negative300.bin' from https://code.google.com/archive/p/word2vec/ and put in into the API folder.
+
+## The usage of API functions
 train_CV(train_file, category, result_file, k_fold=5):
 - function for training the model using cross validation. 
 - train_file is the input training data path (.xlsx file)
